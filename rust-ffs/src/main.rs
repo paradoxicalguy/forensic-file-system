@@ -2,6 +2,7 @@ use std::path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::{File, OpenOptions, read};
 use std::io::{Seek, SeekFrom, Write};
+use std::mem;
 const FILETYPE_FILE: u32 = 1;
 const FILETYPE_DIR: u32 = 2;
 const FS_MAGIC: u32 = 0xF0F03410;
@@ -241,8 +242,28 @@ fn init_inode_bitmap (path: &str, block_size: u64) ->std::io::Result<()> {
 
 fn init_inode_table(path: &str, sb: &Superblock) ->std::io::Result<()> {
     let total_size = sb.inode_blocks as usize * sb.block_size as usize;
-    let mut table = vec![0u8; total_size];
+    let mut table: Vec<u8> = vec![0u8; total_size];
 
     let root = Inode::new(1, FILETYPE_DIR, 0o755, 0);
+    let inode_size = mem::size_of::<Inode>();
+    let root_bytes = unsafe {
+        std::slice::from_raw_parts(&root as *const Inode as *const u8,inode_size )
+    };
+    table[..inode_size].copy_from_slice(root_bytes);
+    let mut file: File = OpenOptions::new()
+    .read(true)
+    .write(true)
+    .open(path)?;   
+
+    for i in 0..sb.inode_blocks {
+      let disk_block = sb.first_inode_block + i;
+      let disk_offset = disk_block as u64 * sb.block_size as u64;   
+
+      let table_offset = i as usize * sb.block_size as usize;
+
+      file.seek(SeekFrom::Start(disk_offset))?;
+      file.write_all(&table[table_offset..table_offset + sb.block_size as usize],)?;
+    }
     Ok(())
 }
+
