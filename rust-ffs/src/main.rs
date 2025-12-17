@@ -1,6 +1,6 @@
 use std::path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::fs::File;
+use std::fs::{File, OpenOptions, read};
 use std::io::{Seek, SeekFrom, Write};
 const FILETYPE_FILE: u32 = 1;
 const FILETYPE_DIR: u32 = 2;
@@ -149,7 +149,7 @@ fn create_disk_image(path: &str, size: u64) -> std::io::Result<()>{
     file.write_all(&[0])?;
 
     Ok(())
-}   
+}
 
 fn write_superblock(path: &str, sb: &Superblock, block_size: u64, block_number: u64) -> std::io::Result<()> {
     let mut file = std::fs::OpenOptions::new()
@@ -159,5 +159,90 @@ fn write_superblock(path: &str, sb: &Superblock, block_size: u64, block_number: 
 
     file.seek(SeekFrom::Start(block_number * block_size))?;
 
+    Ok(())
+}  
+
+fn read_block(path: &str, block_size: u64, block_number: u64, buffer: &mut [u8]) -> std::io::Result<()>{
+      if buffer.len() != block_size as usize {
+        return Err(std::io::Error::new( std::io::ErrorKind::InvalidInput,
+            "buffer size must equal block_size",
+        ));
+    }
+
+   let mut file = OpenOptions::new()
+   .read(true)
+   .open(path)?;
+
+   let offset = block_number * block_size;
+   file.seek(SeekFrom::Start(offset))?;
+   Ok(())
+
+}
+
+fn write_block_bitmap(path: &str, block_size: u64, block_number: u64, bitmap: &[u8]) -> std::io::Result<()> {
+     if bitmap.len() != block_size as usize {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "bitmap size must be equal to block_size"));
+     }
+    let mut file: File = std::fs::OpenOptions::new()   
+    .read(true)
+    .write(true)
+    .open(path)?;
+
+    let offset = block_number * block_size;
+    file.seek(SeekFrom::Start(offset))?;
+    file.write_all(&bitmap)?;
+    Ok(())
+}
+
+fn bitmap_set (bitmap: &mut[u8], block_number: u32) {
+    let byte_index = (block_number / 8) as usize;
+    let bit_index = (block_number % 8) as u8;
+    bitmap[byte_index] |= 1 << bit_index;
+}
+
+fn bitmap_test(bitmap: &[u8], block_number: u32)->bool {
+    let byte = (block_number / 8) as usize;
+    let bit = (block_number % 8) as u8;
+    (bitmap[byte] & (1<<bit)) != 0
+}
+
+fn bitmap_clear(bitmap: &mut[u8], block_number: u32) {
+    let byte = (block_number / 8) as usize;
+    let bit = (block_number % 8) as u8;
+    bitmap[byte] &= !(1<<bit);
+}
+
+fn bitmap_find_tree(bitmap: &[u8], max_bits: u32) ->Option<u32> {
+    for i in 0..max_bits {
+        if !bitmap_test(bitmap, i) {
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn init_block_bitmap(path: &str, block_size: u64) ->std::io::Result<()> {
+    let mut block_bitmap = vec![0u8; block_size as usize];
+
+    for i in 0..=10 {
+        bitmap_set(&mut block_bitmap, i);
+    }
+    write_block_bitmap(path, block_size, 1, &block_bitmap)?;
+    Ok(())
+}
+
+fn init_inode_bitmap (path: &str, block_size: u64) ->std::io::Result<()> {
+    let mut inode_bitmap = vec![0u8; block_size as usize];
+    bitmap_set(&mut inode_bitmap, 0);
+    bitmap_set(&mut inode_bitmap, 1);
+    write_block_bitmap(path, block_size, 2, &inode_bitmap)?;
+    Ok(())
+}
+
+fn init_inode_table(path: &str, sb: &Superblock) ->std::io::Result<()> {
+    let total_size = sb.inode_blocks as usize * sb.block_size as usize;
+    let mut table = vec![0u8; total_size];
+
+    let root = Inode::new(1, FILETYPE_DIR, 0o755, 0);
     Ok(())
 }
