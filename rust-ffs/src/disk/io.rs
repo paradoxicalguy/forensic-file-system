@@ -8,12 +8,7 @@ pub fn create_disk_image(path: &str, size: u64) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn read_block(
-    path: &str,
-    buffer: &mut [u8],
-    block_size: u32,
-    block_number: u32,
-) -> std::io::Result<()> {
+pub fn read_block( path: &str, buffer: &mut [u8], block_size: u32, block_number: u32,) -> std::io::Result<()> {
     let mut file = OpenOptions::new().read(true).open(path)?;
     let offset = block_number as u64 * block_size as u64;
     file.seek(SeekFrom::Start(offset))?;
@@ -21,12 +16,7 @@ pub fn read_block(
     Ok(())
 }
 
-pub fn write_block(
-    path: &str,
-    buffer: &[u8],
-    block_size: u32,
-    block_number: u32,
-) -> std::io::Result<()> {
+pub fn write_block(path: &str, buffer: &[u8], block_size: u32, block_number: u32, ) -> std::io::Result<()> {
     let mut file = OpenOptions::new().read(true).write(true).open(path)?;
     let offset = block_number as u64 * block_size as u64;
     file.seek(SeekFrom::Start(offset))?;
